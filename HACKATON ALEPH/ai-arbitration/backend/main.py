@@ -190,12 +190,26 @@ def _get_all_disputes_from_contract() -> list:
     if not client or not CONTRACT_ADDRESS:
         return []
     try:
-        result = client.read_contract(
+        count_result = client.read_contract(
             address=CONTRACT_ADDRESS,
-            function_name="get_all_disputes",
+            function_name="get_dispute_count",
             args=[],
         )
-        return result if result else []
+        count = int(count_result) if count_result else 0
+
+        disputes = []
+        for i in range(count):
+            try:
+                dispute = client.read_contract(
+                    address=CONTRACT_ADDRESS,
+                    function_name="get_dispute",
+                    args=[i],
+                )
+                if dispute:
+                    disputes.append(dispute)
+            except:
+                pass
+        return disputes
     except Exception as e:
         print(f"Error reading all disputes: {e}")
         return []
@@ -224,6 +238,14 @@ async def create_dispute(req: CreateDisputeRequest):
     """Create a new dispute on GenLayer (or mock)."""
     if _is_live_mode() and account:
         try:
+            # Get current count before creating (this will be the new dispute ID)
+            count_before = client.read_contract(
+                address=CONTRACT_ADDRESS,
+                function_name="get_dispute_count",
+                args=[],
+            )
+            dispute_id = int(count_before) if count_before else 0
+
             tx_hash = client.write_contract(
                 account=account,
                 address=CONTRACT_ADDRESS,
@@ -231,15 +253,12 @@ async def create_dispute(req: CreateDisputeRequest):
                 args=[req.claimant, req.respondent, req.title, req.description],
             )
 
-            receipt = client.wait_for_transaction_receipt(
+            client.wait_for_transaction_receipt(
                 transaction_hash=tx_hash,
                 status=TransactionStatus.ACCEPTED,
                 interval=5000,
                 retries=60,
             )
-
-            dispute_data = _get_dispute_from_contract(0)
-            dispute_id = 0
 
             return {
                 "success": True,
