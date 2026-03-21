@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { healthApi, disputesApi } from '../services/api';
 import type { Dispute, CreateDisputeRequest, SubmitEvidenceRequest, HealthResponse, Scenario } from '../types';
 
+const DISPUTES_CACHE_KEY = 'ai_arbitration_disputes';
+const CACHE_EXPIRY_KEY = 'ai_arbitration_cache_expiry';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 export function useHealth() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -21,61 +25,147 @@ export function useHealth() {
 
   useEffect(() => {
     check();
-    const interval = setInterval(check, 10000);
+    const interval = setInterval(check, 30000);
     return () => clearInterval(interval);
   }, [check]);
 
   return { health, loading, error };
 }
 
+function getCachedDisputes(): { disputes: Dispute[]; timestamp: number } | null {
+  try {
+    const cached = localStorage.getItem(DISPUTES_CACHE_KEY);
+    const timestamp = localStorage.getItem(CACHE_EXPIRY_KEY);
+    if (cached && timestamp) {
+      return {
+        disputes: JSON.parse(cached),
+        timestamp: parseInt(timestamp, 10)
+      };
+    }
+  } catch {
+    // localStorage not available or corrupted
+  }
+  return null;
+}
+
+function setCachedDisputes(disputes: Dispute[]) {
+  try {
+    localStorage.setItem(DISPUTES_CACHE_KEY, JSON.stringify(disputes));
+    localStorage.setItem(CACHE_EXPIRY_KEY, Date.now().toString());
+  } catch {
+    // localStorage not available
+  }
+}
+
+function isCacheValid(): boolean {
+  try {
+    const timestamp = localStorage.getItem(CACHE_EXPIRY_KEY);
+    if (timestamp) {
+      return Date.now() - parseInt(timestamp, 10) < CACHE_DURATION;
+    }
+  } catch {
+    // localStorage not available
+  }
+  return false;
+}
+
 export function useDisputes() {
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastFetch, setLastFetch] = useState<number>(0);
 
-  const loadDisputes = useCallback(async () => {
+  const loadDisputes = useCallback(async (forceRefresh = false) => {
+    if (!forceRefresh && isCacheValid()) {
+      const cached = getCachedDisputes();
+      if (cached) {
+        setDisputes(cached.disputes);
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const data = await disputesApi.getAll();
       setDisputes(data.disputes);
+      setCachedDisputes(data.disputes);
+      setLastFetch(Date.now());
       setError(null);
     } catch {
-      setError('Failed to load disputes');
+      const cached = getCachedDisputes();
+      if (cached) {
+        setDisputes(cached.disputes);
+        setError('Using cached data (backend unavailable)');
+      } else {
+        setError('Failed to load disputes');
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const createDispute = async (data: CreateDisputeRequest): Promise<number | null> => {
-    const response = await disputesApi.create(data);
-    if (response.success) {
-      await loadDisputes();
-      return response.dispute_id ?? null;
-    }
-    return null;
-  };
+  useEffect(() => {
+    loadDisputes();
+  }, [loadDisputes]);
 
-  const submitEvidence = async (id: number, data: SubmitEvidenceRequest): Promise<boolean> => {
-    await disputesApi.submitEvidence(id, data);
-    return true;
-  };
-
-  const resolveDispute = async (id: number) => {
-    const response = await disputesApi.resolve(id);
-    if (response.success) {
-      await loadDisputes();
+  const createDispute = useCallback(async (data: CreateDisputeRequest): Promise<number | null> => {
+    try {
+      const response = await disputesApi.create(data);
+      if (response.success) {
+        await loadDisputes(true);
+        return response.dispute_id ?? null;
+      }
+      return null;
+    } catch {
+      return null;
     }
-    return response;
-  };
+  }, [loadDisputes]);
+
+  const submitEvidence = useCallback(async (id: number, data: SubmitEvidenceRequest): Promise<boolean> => {
+    try {
+      await disputesApi.submitEvidence(id, data);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const resolveDispute = useCallback(async (id: number) => {
+    try {
+      const response = await disputesApi.resolve(id);
+      if (response.success) {
+        await loadDisputes(true);
+      }
+      return response;
+    } catch {
+      return null;
+    }
+  }, [loadDisputes]);
+
+  const getDispute = useCallback((id: number): Dispute | undefined => {
+    return disputes.find(d => d.id === id);
+  }, [disputes]);
+
+  const clearCache = useCallback(() => {
+    try {
+      localStorage.removeItem(DISPUTES_CACHE_KEY);
+      localStorage.removeItem(CACHE_EXPIRY_KEY);
+    } catch {
+      // localStorage not available
+    }
+  }, []);
 
   return {
     disputes,
     loading,
     error,
+    lastFetch,
     loadDisputes,
     createDispute,
     submitEvidence,
     resolveDispute,
+    getDispute,
+    clearCache,
   };
 }
 

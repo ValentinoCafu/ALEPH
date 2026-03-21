@@ -1,30 +1,32 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Upload } from 'lucide-react';
+import { Upload, ChevronDown } from 'lucide-react';
 import { disputesApi } from '../services/api';
 import type { Dispute } from '../types';
 
 interface SubmitEvidenceCardProps {
   disputeId: number | null;
   disputes: Dispute[];
+  onSelected: (id: number | null) => void;
   onSubmitted: () => void;
 }
 
-export function SubmitEvidenceCard({ disputeId, disputes, onSubmitted }: SubmitEvidenceCardProps) {
+export function SubmitEvidenceCard({ disputeId, disputes, onSelected, onSubmitted }: SubmitEvidenceCardProps) {
   const [party, setParty] = useState<'claimant' | 'respondent'>('claimant');
   const [evidence, setEvidence] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!disputeId) {
-      setMessage({ type: 'error', text: 'Create a dispute first to submit evidence.' });
+      setMessage({ type: 'error', text: 'Select a dispute first.' });
       return;
     }
     
-    if (!evidence) {
+    if (!evidence.trim()) {
       setMessage({ type: 'error', text: 'Please enter evidence content.' });
       return;
     }
@@ -50,6 +52,7 @@ export function SubmitEvidenceCard({ disputeId, disputes, onSubmitted }: SubmitE
   };
 
   const openDisputes = disputes.filter(d => d.status === 'open');
+  const selectedDispute = disputes.find(d => d.id === disputeId);
 
   return (
     <motion.div
@@ -67,22 +70,43 @@ export function SubmitEvidenceCard({ disputeId, disputes, onSubmitted }: SubmitE
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm text-gray-400 mb-2">Dispute ID</label>
-          <select
-            value={disputeId ?? ''}
-            disabled
-            className="w-full px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all appearance-none cursor-pointer disabled:opacity-50"
+        <div className="relative">
+          <label className="block text-sm text-gray-400 mb-2">Select Dispute</label>
+          <button
+            type="button"
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            disabled={loading || openDisputes.length === 0}
+            className="w-full px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-white text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all disabled:opacity-50"
           >
-            <option value="" className="bg-gray-900">
-              {openDisputes.length > 0 ? `Select Dispute (${openDisputes.length} open)` : 'No open disputes'}
-            </option>
-            {openDisputes.map(d => (
-              <option key={d.id} value={d.id} className="bg-gray-900">
-                #{d.id} - {d.title.slice(0, 30)}...
-              </option>
-            ))}
-          </select>
+            <span className={selectedDispute ? 'text-white' : 'text-gray-500'}>
+              {selectedDispute 
+                ? `#${selectedDispute.id} - ${selectedDispute.title.slice(0, 25)}${selectedDispute.title.length > 25 ? '...' : ''}`
+                : openDisputes.length > 0 
+                  ? `Select Dispute (${openDisputes.length} open)`
+                  : 'No open disputes'
+              }
+            </span>
+            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {dropdownOpen && openDisputes.length > 0 && (
+            <div className="absolute z-10 w-full mt-2 bg-gray-900 border border-white/10 rounded-2xl overflow-hidden shadow-xl max-h-60 overflow-y-auto">
+              {openDisputes.map(d => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => {
+                    onSelected(d.id);
+                    setDropdownOpen(false);
+                  }}
+                  className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors text-white text-sm border-b border-white/5 last:border-b-0"
+                >
+                  <span className="text-blue-400">#{d.id}</span> - {d.title.slice(0, 35)}
+                  {d.title.length > 35 && '...'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div>

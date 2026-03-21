@@ -7,7 +7,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('New Dispute');
   const [selectedDisputeId, setSelectedDisputeId] = useState<number | null>(null);
   const [pendingScenario, setPendingScenario] = useState<CreateDisputeRequest | null>(null);
-  const { disputes, loadDisputes, submitEvidence } = useDisputes();
+  const { disputes, loadDisputes, submitEvidence, clearCache } = useDisputes();
   const { scenarios } = useScenarios();
 
   const handleScenarioSelect = useCallback((scenario: Scenario) => {
@@ -31,20 +31,30 @@ function App() {
     }
     
     setPendingScenario(null);
-    await loadDisputes();
+    await loadDisputes(true);
   }, [pendingScenario, scenarios, submitEvidence, loadDisputes]);
+
+  const handleDisputeSelected = useCallback((id: number | null) => {
+    setSelectedDisputeId(id);
+  }, []);
 
   const clearScenario = useCallback(() => {
     setPendingScenario(null);
   }, []);
 
-  const handleEvidenceSubmitted = useCallback(() => {
-    loadDisputes();
+  const handleEvidenceSubmitted = useCallback(async () => {
+    await loadDisputes(true);
   }, [loadDisputes]);
 
-  const handleResolved = useCallback(() => {
-    loadDisputes();
+  const handleResolved = useCallback(async () => {
+    setSelectedDisputeId(null);
+    await loadDisputes(true);
   }, [loadDisputes]);
+
+  const handleRefresh = useCallback(() => {
+    clearCache();
+    loadDisputes(true);
+  }, [clearCache, loadDisputes]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-blue-950 relative overflow-hidden">
@@ -69,10 +79,13 @@ function App() {
               <SubmitEvidenceCard 
                 disputeId={selectedDisputeId}
                 disputes={disputes}
+                onSelected={handleDisputeSelected}
                 onSubmitted={handleEvidenceSubmitted}
               />
               <AIResolutionCard 
                 disputeId={selectedDisputeId}
+                disputes={disputes}
+                onSelected={handleDisputeSelected}
                 onResolved={handleResolved}
               />
             </div>
@@ -80,7 +93,7 @@ function App() {
             <DemoScenarios onSelect={handleScenarioSelect} />
           </>
         ) : (
-          <AllDisputesView />
+          <AllDisputesView onRefresh={handleRefresh} />
         )}
       </div>
     </div>

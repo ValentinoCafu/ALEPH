@@ -1,18 +1,21 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, ChevronDown } from 'lucide-react';
 import { disputesApi } from '../services/api';
 import { VERDICT_CONFIG } from '../constants';
 import type { Dispute } from '../types';
 
 interface AIResolutionCardProps {
   disputeId: number | null;
+  disputes: Dispute[];
+  onSelected: (id: number | null) => void;
   onResolved: () => void;
 }
 
-export function AIResolutionCard({ disputeId, onResolved }: AIResolutionCardProps) {
+export function AIResolutionCard({ disputeId, disputes, onSelected, onResolved }: AIResolutionCardProps) {
   const [isResolving, setIsResolving] = useState(false);
   const [result, setResult] = useState<Dispute | null>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const handleResolve = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +40,8 @@ export function AIResolutionCard({ disputeId, onResolved }: AIResolutionCardProp
     }
   };
 
+  const openDisputes = disputes.filter(d => d.status === 'open');
+  const selectedDispute = disputes.find(d => d.id === disputeId);
   const verdict = result?.verdict as keyof typeof VERDICT_CONFIG | null;
   const config = verdict ? VERDICT_CONFIG[verdict] : null;
   const confidence = result?.confidence;
@@ -69,16 +74,43 @@ export function AIResolutionCard({ disputeId, onResolved }: AIResolutionCardProp
       </div>
 
       <form onSubmit={handleResolve} className="space-y-4">
-        <div>
-          <label className="block text-sm text-gray-400 mb-2">Dispute ID</label>
-          <input
-            type="text"
-            value={disputeId ?? ''}
-            readOnly
-            placeholder="Create a dispute first"
-            disabled={isResolving}
-            className="w-full px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-transparent transition-all disabled:opacity-50 cursor-not-allowed"
-          />
+        <div className="relative">
+          <label className="block text-sm text-gray-400 mb-2">Select Dispute</label>
+          <button
+            type="button"
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            disabled={isResolving || openDisputes.length === 0}
+            className="w-full px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-white text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all disabled:opacity-50"
+          >
+            <span className={selectedDispute ? 'text-white' : 'text-gray-500'}>
+              {selectedDispute 
+                ? `#${selectedDispute.id} - ${selectedDispute.title.slice(0, 25)}${selectedDispute.title.length > 25 ? '...' : ''}`
+                : openDisputes.length > 0 
+                  ? `Select Dispute (${openDisputes.length} open)`
+                  : 'No open disputes'
+              }
+            </span>
+            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {dropdownOpen && openDisputes.length > 0 && (
+            <div className="absolute z-10 w-full mt-2 bg-gray-900 border border-white/10 rounded-2xl overflow-hidden shadow-xl max-h-60 overflow-y-auto">
+              {openDisputes.map(d => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => {
+                    onSelected(d.id);
+                    setDropdownOpen(false);
+                  }}
+                  className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors text-white text-sm border-b border-white/5 last:border-b-0"
+                >
+                  <span className="text-emerald-400">#{d.id}</span> - {d.title.slice(0, 35)}
+                  {d.title.length > 35 && '...'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">

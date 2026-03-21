@@ -1,15 +1,24 @@
 import { useEffect } from 'react';
 import { motion } from 'motion/react';
-import { FileText, User, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { FileText, User, Clock, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import { useDisputes } from '../hooks/useDisputes';
 import { VERDICT_TAG_COLORS } from '../constants';
 
-export function AllDisputesView() {
+interface AllDisputesViewProps {
+  onRefresh?: () => void;
+}
+
+export function AllDisputesView({ onRefresh }: AllDisputesViewProps) {
   const { disputes, loading, error, loadDisputes } = useDisputes();
 
   useEffect(() => {
     loadDisputes();
   }, [loadDisputes]);
+
+  const handleRefresh = () => {
+    loadDisputes(true);
+    onRefresh?.();
+  };
 
   const getStatusDisplay = (dispute: typeof disputes[0]) => {
     if (dispute.status === 'resolved') {
@@ -21,7 +30,7 @@ export function AllDisputesView() {
       };
     }
     
-    if (dispute.evidence && dispute.evidence.length > 0) {
+    if ((dispute as any).evidence_count > 0 || (dispute as any).evidence?.length > 0) {
       return {
         label: 'Evidence Phase',
         color: 'text-purple-400',
@@ -39,6 +48,7 @@ export function AllDisputesView() {
   };
 
   const formatDate = (timestamp: number) => {
+    if (!timestamp) return 'N/A';
     return new Date(timestamp * 1000).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -47,8 +57,13 @@ export function AllDisputesView() {
   };
 
   const truncateAddress = (address: string, chars = 6) => {
+    if (!address) return 'N/A';
     if (address.length <= chars * 2 + 3) return address;
     return `${address.slice(0, chars)}...${address.slice(-chars)}`;
+  };
+
+  const getEvidenceCount = (dispute: typeof disputes[0]): number => {
+    return (dispute as any).evidence_count || (dispute as any).evidence?.length || 0;
   };
 
   return (
@@ -59,26 +74,40 @@ export function AllDisputesView() {
           animate={{ opacity: 1, y: 0 }}
           className="text-2xl font-semibold text-white"
         >
-          All Disputes
+          All Disputes ({disputes.length})
         </motion.h2>
         <button
-          onClick={loadDisputes}
-          className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-gray-300 text-sm hover:bg-white/10 transition-all"
+          onClick={handleRefresh}
+          disabled={loading}
+          className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-gray-300 text-sm hover:bg-white/10 transition-all disabled:opacity-50 flex items-center gap-2"
         >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
 
-      {loading && (
-        <div className="text-center text-gray-400 py-8">Loading disputes...</div>
+      {loading && disputes.length === 0 && (
+        <div className="text-center text-gray-400 py-8 flex items-center justify-center gap-2">
+          <RefreshCw className="w-5 h-5 animate-spin" />
+          Loading disputes...
+        </div>
       )}
 
       {error && (
-        <div className="text-center text-red-400 py-8">Error: {error}</div>
+        <div className="text-center text-red-400 py-8">
+          {error}
+          <button 
+            onClick={handleRefresh}
+            className="ml-2 text-sm underline hover:no-underline"
+          >
+            Try again
+          </button>
+        </div>
       )}
 
-      {!loading && disputes.length === 0 && (
+      {!loading && disputes.length === 0 && !error && (
         <div className="text-center text-gray-500 py-12 glass-card rounded-3xl">
+          <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
           <p>No disputes found.</p>
           <p className="text-sm mt-2">Create your first dispute to get started!</p>
         </div>
@@ -88,6 +117,7 @@ export function AllDisputesView() {
         {disputes.map((dispute, index) => {
           const statusDisplay = getStatusDisplay(dispute);
           const StatusIcon = statusDisplay.icon;
+          const evidenceCount = getEvidenceCount(dispute);
           
           return (
             <motion.div
@@ -104,8 +134,8 @@ export function AllDisputesView() {
                     <FileText className="w-6 h-6 text-purple-400" />
                   </div>
                   <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="text-xs text-gray-500">#{dispute.id}</span>
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
+                      <span className="text-xs text-gray-500 font-mono bg-white/5 px-2 py-1 rounded">#{dispute.id}</span>
                       <h3 className="text-lg font-semibold text-white">{dispute.title}</h3>
                       {dispute.verdict && (
                         <span className={`text-xs px-2 py-0.5 rounded-full ${VERDICT_TAG_COLORS[dispute.verdict]}`}>
@@ -128,12 +158,12 @@ export function AllDisputesView() {
                       </div>
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4" />
-                        <span>{dispute.evidence?.length || 0} evidence</span>
+                        <span>{evidenceCount} evidence</span>
                       </div>
                     </div>
                   </div>
                 </div>
-                <div className={`px-4 py-2 rounded-full ${statusDisplay.bg} border border-white/10 flex items-center gap-2`}>
+                <div className={`px-4 py-2 rounded-full ${statusDisplay.bg} border border-white/10 flex items-center gap-2 flex-shrink-0`}>
                   <StatusIcon className={`w-4 h-4 ${statusDisplay.color}`} />
                   <span className={`text-sm font-semibold ${statusDisplay.color}`}>
                     {statusDisplay.label}
@@ -143,8 +173,8 @@ export function AllDisputesView() {
               
               {dispute.reason && (
                 <div className="mt-2 text-sm text-gray-400 italic border-t border-white/5 pt-3">
-                  "{dispute.reason.slice(0, 150)}
-                  {dispute.reason.length > 150 ? '...' : ''}"
+                  "{dispute.reason.slice(0, 200)}
+                  {dispute.reason.length > 200 ? '...' : ''}"
                 </div>
               )}
             </motion.div>
