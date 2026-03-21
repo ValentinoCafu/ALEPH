@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Arbitration — GenLayer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .verdict-FAVOR_CLAIMANT  { @apply bg-green-100 border-green-500 text-green-800; }
+    .verdict-FAVOR_RESPONDENT { @apply bg-blue-100 border-blue-500 text-blue-800; }
+    .verdict-INCONCLUSIVE    { @apply bg-yellow-100 border-yellow-500 text-yellow-800; }
+    .pulse-ring { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+  <!-- Header -->
+  <header class="border-b border-gray-800 bg-gray-900/80 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center text-sm font-bold">⚖️</div>
+        <div>
+          <h1 class="font-bold text-lg leading-none">AI Arbitration</h1>
+          <p class="text-xs text-gray-400 leading-none mt-0.5">Powered by GenLayer · Bradbury Testnet</p>
+        </div>
+      </div>
+      <div id="statusBadge" class="flex items-center gap-2 text-xs bg-gray-800 px-3 py-1.5 rounded-full">
+        <span class="w-2 h-2 rounded-full bg-gray-500" id="statusDot"></span>
+        <span id="statusText">Connecting...</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-6 py-8">
+
+    <!-- Hero -->
+    <div class="text-center mb-10">
+      <h2 class="text-3xl font-bold mb-2">Decentralized AI Dispute Resolution</h2>
+      <p class="text-gray-400 max-w-xl mx-auto text-sm">
+        Multiple AI validators independently evaluate evidence and reach consensus
+        via GenLayer's Optimistic Democracy — permanently recorded on-chain.
+      </p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-2 mb-6 border-b border-gray-800">
+      <button onclick="showTab('create')" id="tab-create"
+        class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-violet-500 text-violet-400 -mb-px">
+        + New Dispute
+      </button>
+      <button onclick="showTab('list')" id="tab-list"
+        class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-gray-200 -mb-px">
+        All Disputes
+      </button>
+    </div>
+
+    <!-- CREATE DISPUTE TAB -->
+    <div id="tab-create-content">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- Step 1: Create -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <h3 class="font-semibold text-sm text-gray-300 uppercase tracking-wider mb-4">
+            Step 1 — Create Dispute
+          </h3>
+          <form id="createForm" class="space-y-3">
+            <div>
+              <label class="text-xs text-gray-400 mb-1 block">Claimant (who filed)</label>
+              <input id="claimant" type="text" placeholder="e.g. Alice (Client)"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500" />
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 mb-1 block">Respondent (accused party)</label>
+              <input id="respondent" type="text" placeholder="e.g. Bob (Developer)"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500" />
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 mb-1 block">Title</label>
+              <input id="title" type="text" placeholder="e.g. Incomplete Contract Delivery"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500" />
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 mb-1 block">Description</label>
+              <textarea id="description" rows="3" placeholder="Describe the dispute in detail..."
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500 resize-none"></textarea>
+            </div>
+            <button type="submit"
+              class="w-full bg-violet-600 hover:bg-violet-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">
+              Create Dispute On-Chain →
+            </button>
+          </form>
+          <div id="createResult" class="mt-3 hidden"></div>
+        </div>
+
+        <!-- Step 2 & 3: Evidence + Resolve -->
+        <div class="space-y-4">
+          <!-- Evidence -->
+          <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+            <h3 class="font-semibold text-sm text-gray-300 uppercase tracking-wider mb-4">
+              Step 2 — Submit Evidence
+            </h3>
+            <div class="space-y-3">
+              <div>
+                <label class="text-xs text-gray-400 mb-1 block">Dispute ID</label>
+                <input id="evidenceDisputeId" type="number" placeholder="0"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500" />
+              </div>
+              <div>
+                <label class="text-xs text-gray-400 mb-1 block">Party</label>
+                <select id="party"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500">
+                  <option value="claimant">Claimant</option>
+                  <option value="respondent">Respondent</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-gray-400 mb-1 block">Evidence</label>
+                <textarea id="evidenceContent" rows="2" placeholder="Describe your evidence..."
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500 resize-none"></textarea>
+              </div>
+              <button onclick="submitEvidence()"
+                class="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 rounded-lg text-sm transition-colors">
+                Submit Evidence
+              </button>
+            </div>
+            <div id="evidenceResult" class="mt-3 hidden"></div>
+          </div>
+
+          <!-- Resolve -->
+          <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+            <h3 class="font-semibold text-sm text-gray-300 uppercase tracking-wider mb-4">
+              Step 3 — AI Resolution
+            </h3>
+            <p class="text-xs text-gray-500 mb-3">
+              Triggers GenLayer validators. Each calls their own LLM.
+              Consensus = final verdict. Takes ~30–60 seconds.
+            </p>
+            <div class="flex gap-2">
+              <input id="resolveDisputeId" type="number" placeholder="Dispute ID"
+                class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500" />
+              <button onclick="resolveDispute()" id="resolveBtn"
+                class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap">
+                Resolve with AI ✨
+              </button>
+            </div>
+            <div id="resolveResult" class="mt-3"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preset Demo Scenarios -->
+      <div class="mt-6 bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <h3 class="font-semibold text-sm text-gray-300 uppercase tracking-wider mb-4">
+          🎯 Quick Demo Scenarios (click to auto-fill)
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <button onclick="loadScenario(0)"
+            class="text-left p-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs transition-colors border border-gray-700">
+            <div class="font-medium text-gray-200 mb-1">💻 Freelance Dev Dispute</div>
+            <div class="text-gray-500">Client paid $2,000 for incomplete smart contract work</div>
+          </button>
+          <button onclick="loadScenario(1)"
+            class="text-left p-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs transition-colors border border-gray-700">
+            <div class="font-medium text-gray-200 mb-1">🏠 NFT Marketplace Scam</div>
+            <div class="text-gray-500">Buyer claims NFT artwork was stolen/plagiarized</div>
+          </button>
+          <button onclick="loadScenario(2)"
+            class="text-left p-3 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs transition-colors border border-gray-700">
+            <div class="font-medium text-gray-200 mb-1">🤝 DAO Governance Breach</div>
+            <div class="text-gray-500">Core team acted outside approved proposal scope</div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ALL DISPUTES TAB -->
+    <div id="tab-list-content" class="hidden">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-medium text-gray-300">All Disputes</h3>
+        <button onclick="loadDisputes()"
+          class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition-colors">
+          🔄 Refresh
+        </button>
+      </div>
+      <div id="disputesList" class="space-y-3">
+        <div class="text-center text-gray-500 py-8 text-sm">Click refresh to load disputes</div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // ─── Config ────────────────────────────────────────────────────
+    const API_URL = 'http://localhost:8000';
+
+    // ─── Demo scenarios ────────────────────────────────────────────
+    const SCENARIOS = [
+      {
+        claimant:    'Alice (Software Client)',
+        respondent:  'Bob (Freelance Developer)',
+        title:       'Incomplete Smart Contract Delivery',
+        description: 'Alice hired Bob for $2,000 to build a staking contract with reward calculation logic. Bob delivered a contract on time, but the reward calculation function was missing, making the contract non-functional for its intended purpose.',
+        evidence: [
+          { party: 'claimant',   content: 'I have a Telegram conversation from March 5th where Bob confirmed the scope: "I will implement the full staking logic including APY rewards." The delivered contract has no reward function — I can prove this with the contract address: 0x123...' },
+          { party: 'respondent', content: 'I delivered a fully working ERC-20 staking contract before the deadline. The reward calculation was discussed verbally but was NOT in the written scope document we both signed. I only agreed to the staking deposit/withdrawal mechanism.' }
+        ]
+      },
+      {
+        claimant:    'CarlosBuyer.eth',
+        respondent:  'ArtCreator.eth',
+        title:       'NFT Artwork Plagiarism Claim',
+        description: 'CarlosBuyer purchased an NFT for 2 ETH that was later identified as a copy of an existing artwork. The original artist has filed a DMCA takedown on the source platform.',
+        evidence: [
+          { party: 'claimant',   content: 'I purchased the NFT "SunsetDream #47" for 2 ETH on March 1st. On March 10th, the original artist published proof that this artwork is a copy of their 2019 illustration "Golden Hour" with identical color gradients and composition. The DMCA was filed and accepted.' },
+          { party: 'respondent', content: 'My artwork is an original piece created in 2023. I can provide my Photoshop file with layer timestamps. The similarities the claimant mentions are coincidental — this is a common artistic style. I have never seen the referenced 2019 illustration.' }
+        ]
+      },
+      {
+        claimant:    'CommunityDAO Member (0xabc...)',
+        respondent:  'CoreTeam.eth',
+        title:       'Unauthorized Treasury Expenditure',
+        description: 'The DAO core team spent 50 ETH from the treasury on marketing without an approved governance proposal, violating the DAO constitution which requires proposals for expenditures over 10 ETH.',
+        evidence: [
+          { party: 'claimant',   content: 'DAO constitution Article 4.2 requires governance approval for any treasury spend above 10 ETH. Transaction 0xdef... shows 50 ETH sent to MarketingCo on Feb 28th. No governance proposal exists for this expenditure in our on-chain records.' },
+          { party: 'respondent', content: 'The DAO Discord had a unanimous informal agreement from the 12 core contributors on Feb 25th. We acted in good faith under time pressure — the marketing window was closing. We are filing a retroactive proposal this week to formalize the expenditure.' }
+        ]
+      }
+    ];
+
+    // ─── Status check ──────────────────────────────────────────────
+    async function checkStatus() {
+      try {
+        const r = await fetch(`${API_URL}/health`);
+        const d = await r.json();
+        const dot  = document.getElementById('statusDot');
+        const text = document.getElementById('statusText');
+        if (d.status === 'ok') {
+          dot.className  = 'w-2 h-2 rounded-full bg-emerald-400';
+          text.textContent = d.mode === 'live'
+            ? `Live · ${d.contract_address.slice(0,8)}...`
+            : 'Mock Mode · No contract';
+        }
+      } catch {
+        document.getElementById('statusDot').className = 'w-2 h-2 rounded-full bg-red-400';
+        document.getElementById('statusText').textContent = 'Backend offline';
+      }
+    }
+
+    // ─── Tab switching ─────────────────────────────────────────────
+    function showTab(name) {
+      document.getElementById('tab-create-content').classList.toggle('hidden', name !== 'create');
+      document.getElementById('tab-list-content').classList.toggle('hidden', name !== 'list');
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('border-violet-500', 'text-violet-400');
+        b.classList.add('border-transparent', 'text-gray-400');
+      });
+      const active = document.getElementById(`tab-${name}`);
+      active.classList.add('border-violet-500', 'text-violet-400');
+      active.classList.remove('border-transparent', 'text-gray-400');
+      if (name === 'list') loadDisputes();
+    }
+
+    // ─── Create dispute ────────────────────────────────────────────
+    document.getElementById('createForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {
+        claimant:    document.getElementById('claimant').value,
+        respondent:  document.getElementById('respondent').value,
+        title:       document.getElementById('title').value,
+        description: document.getElementById('description').value
+      };
+      if (!body.claimant || !body.respondent || !body.title || !body.description) {
+        showResult('createResult', '⚠️ Please fill in all fields.', 'warn');
+        return;
+      }
+      showResult('createResult', '⏳ Submitting to blockchain...', 'loading');
+      try {
+        const r = await fetch(`${API_URL}/disputes`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const d = await r.json();
+        if (r.ok) {
+          const id = d.dispute_id ?? '(check chain)';
+          showResult('createResult', `✅ Dispute created! ID: <strong>${id}</strong><br><span class="text-xs opacity-70">${d.tx_hash ? 'TX: '+d.tx_hash.slice(0,16)+'...' : d.message}</span>`, 'success');
+          document.getElementById('evidenceDisputeId').value = id;
+          document.getElementById('resolveDisputeId').value  = id;
+        } else {
+          showResult('createResult', `❌ Error: ${d.detail}`, 'error');
+        }
+      } catch (err) {
+        showResult('createResult', `❌ Connection failed. Is backend running?`, 'error');
+      }
+    });
+
+    // ─── Submit evidence ───────────────────────────────────────────
+    async function submitEvidence() {
+      const id = document.getElementById('evidenceDisputeId').value;
+      const body = {
+        party:   document.getElementById('party').value,
+        content: document.getElementById('evidenceContent').value
+      };
+      if (!id || !body.content) { showResult('evidenceResult', '⚠️ Fill dispute ID and evidence.', 'warn'); return; }
+      showResult('evidenceResult', '⏳ Submitting evidence...', 'loading');
+      try {
+        const r = await fetch(`${API_URL}/disputes/${id}/evidence`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const d = await r.json();
+        if (r.ok) {
+          showResult('evidenceResult', `✅ Evidence submitted for ${body.party}!`, 'success');
+          document.getElementById('evidenceContent').value = '';
+        } else {
+          showResult('evidenceResult', `❌ ${d.detail}`, 'error');
+        }
+      } catch { showResult('evidenceResult', '❌ Connection failed.', 'error'); }
+    }
+
+    // ─── Resolve dispute ───────────────────────────────────────────
+    async function resolveDispute() {
+      const id = document.getElementById('resolveDisputeId').value;
+      if (!id) { showResult('resolveResult', '⚠️ Enter a dispute ID.', 'warn'); return; }
+
+      const btn = document.getElementById('resolveBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ AI thinking...';
+      btn.className = btn.className.replace('bg-emerald-600 hover:bg-emerald-500', 'bg-gray-600');
+
+      showResult('resolveResult', `
+        <div class="flex items-center gap-3 p-3 bg-gray-800 rounded-lg">
+          <div class="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
+          <div>
+            <div class="text-sm font-medium">GenLayer validators calling LLMs...</div>
+            <div class="text-xs text-gray-400">Each validator queries their own AI model. Consensus in progress.</div>
+          </div>
+        </div>
+      `, 'raw');
+
+      try {
+        const r = await fetch(`${API_URL}/disputes/${id}/resolve`, { method: 'POST' });
+        const d = await r.json();
+
+        if (r.ok) {
+          const dispute = d.dispute || d.result;
+          const verdict = dispute?.verdict || 'INCONCLUSIVE';
+          const reason  = dispute?.reason  || 'No reason provided.';
+          const conf    = dispute?.confidence;
+          const confPct = conf != null ? Math.round(conf * 100) : null;
+
+          const colors = {
+            FAVOR_CLAIMANT:   'border-green-500 bg-green-950 text-green-300',
+            FAVOR_RESPONDENT: 'border-blue-500 bg-blue-950 text-blue-300',
+            INCONCLUSIVE:     'border-yellow-500 bg-yellow-950 text-yellow-300'
+          };
+          const icons = { FAVOR_CLAIMANT: '🟢', FAVOR_RESPONDENT: '🔵', INCONCLUSIVE: '🟡' };
+
+          showResult('resolveResult', `
+            <div class="border rounded-lg p-4 ${colors[verdict] || colors.INCONCLUSIVE}">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-bold text-base">${icons[verdict] || '⚖️'} ${verdict.replace('_', ' ')}</span>
+                ${confPct != null ? `<span class="text-xs opacity-70">Confidence: ${confPct}%</span>` : ''}
+              </div>
+              <p class="text-sm opacity-90">${reason}</p>
+              ${d.tx_hash ? `<p class="text-xs opacity-50 mt-2">TX: ${d.tx_hash.slice(0,20)}...</p>` : ''}
+              <p class="text-xs opacity-50 mt-1">${d.mode === 'mock' ? '⚠️ Mock mode' : '✅ Stored on-chain'}</p>
+            </div>
+          `, 'raw');
+        } else {
+          showResult('resolveResult', `❌ ${d.detail}`, 'error');
+        }
+      } catch {
+        showResult('resolveResult', '❌ Connection failed.', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Resolve with AI ✨';
+        btn.className = btn.className.replace('bg-gray-600', 'bg-emerald-600 hover:bg-emerald-500');
+      }
+    }
+
+    // ─── Load all disputes ─────────────────────────────────────────
+    async function loadDisputes() {
+      const el = document.getElementById('disputesList');
+      el.innerHTML = '<div class="text-center text-gray-500 py-8 text-sm">Loading...</div>';
+      try {
+        const r = await fetch(`${API_URL}/disputes`);
+        const d = await r.json();
+        const disputes = d.disputes || [];
+        if (disputes.length === 0) {
+          el.innerHTML = '<div class="text-center text-gray-500 py-8 text-sm">No disputes found. Create one!</div>';
+          return;
+        }
+        el.innerHTML = disputes.map(dispute => {
+          const statusColor = dispute.status === 'resolved' ? 'text-emerald-400' : 'text-yellow-400';
+          const verdictTag = dispute.verdict
+            ? `<span class="text-xs px-2 py-0.5 rounded-full ${
+                dispute.verdict === 'FAVOR_CLAIMANT'   ? 'bg-green-900 text-green-300'   :
+                dispute.verdict === 'FAVOR_RESPONDENT' ? 'bg-blue-900 text-blue-300'     :
+                'bg-yellow-900 text-yellow-300'
+              }">${dispute.verdict.replace('_',' ')}</span>` : '';
+          return `
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 hover:border-gray-700 transition-colors">
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xs text-gray-500">#${dispute.id}</span>
+                    <span class="font-medium text-sm">${dispute.title}</span>
+                    ${verdictTag}
+                  </div>
+                  <p class="text-xs text-gray-500 truncate">${dispute.description}</p>
+                  <div class="flex gap-3 mt-2 text-xs text-gray-500">
+                    <span>👤 ${dispute.claimant}</span>
+                    <span>vs</span>
+                    <span>👤 ${dispute.respondent}</span>
+                    <span>📋 ${dispute.evidence?.length || 0} evidence</span>
+                  </div>
+                  ${dispute.reason ? `<p class="text-xs text-gray-400 mt-2 italic">"${dispute.reason.slice(0,120)}${dispute.reason.length > 120 ? '...' : ''}"</p>` : ''}
+                </div>
+                <span class="text-xs ${statusColor} font-medium flex-shrink-0">${dispute.status.toUpperCase()}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch {
+        el.innerHTML = '<div class="text-center text-red-400 py-8 text-sm">❌ Could not load disputes. Is the backend running?</div>';
+      }
+    }
+
+    // ─── Load demo scenario ────────────────────────────────────────
+    function loadScenario(i) {
+      const s = SCENARIOS[i];
+      document.getElementById('claimant').value    = s.claimant;
+      document.getElementById('respondent').value  = s.respondent;
+      document.getElementById('title').value       = s.title;
+      document.getElementById('description').value = s.description;
+      showResult('createResult', `✅ Scenario "${s.title}" loaded! Submit to create it.`, 'success');
+      window._pendingEvidence = s.evidence;
+    }
+
+    // ─── Helpers ───────────────────────────────────────────────────
+    function showResult(elId, msg, type) {
+      const el = document.getElementById(elId);
+      el.classList.remove('hidden');
+      if (type === 'raw') { el.innerHTML = msg; return; }
+      const colors = {
+        success: 'bg-emerald-900/50 border-emerald-700 text-emerald-300',
+        error:   'bg-red-900/50 border-red-700 text-red-300',
+        warn:    'bg-yellow-900/50 border-yellow-700 text-yellow-300',
+        loading: 'bg-gray-800 border-gray-700 text-gray-300'
+      };
+      el.innerHTML = `<div class="border rounded-lg px-3 py-2 text-xs ${colors[type] || colors.loading}">${msg}</div>`;
+    }
+
+    // ─── Init ──────────────────────────────────────────────────────
+    checkStatus();
+    setInterval(checkStatus, 10000);
+  </script>
+</body>
+</html>
