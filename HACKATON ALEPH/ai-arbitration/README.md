@@ -18,7 +18,7 @@
 - Node.js 18+
 - npm
 
-### Setup (One-time)
+### Setup (Linux/macOS/WSL)
 
 ```bash
 # Clone the repository
@@ -30,7 +30,20 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
+### Setup (Windows)
+
+```powershell
+# Open PowerShell as Administrator
+# Navigate to the project directory
+cd ruta\al\ai-arbitration
+
+# Run the setup
+.\setup.ps1
+```
+
 ### Running the Application
+
+#### Linux/macOS/WSL
 
 ```bash
 # Option 1: Run both services together (recommended)
@@ -44,6 +57,26 @@ cd backend && ./start.sh
 # Terminal 2 - Frontend
 cd frontend && ./start.sh
 ```
+
+#### Windows (PowerShell)
+
+```powershell
+# Option 1: Run both services together (opens 2 new terminals)
+.\start.ps1
+
+# Option 2: Run services separately
+# Terminal 1
+cd backend && .\start.ps1
+
+# Terminal 2
+cd frontend && .\start.ps1
+```
+
+> **Note**: On first run, if you see script execution errors, run:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+> Or use: `powershell -ExecutionPolicy Bypass -File start.ps1`
 
 ### Access Points
 
