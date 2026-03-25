@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion } from 'motion/react';
-import { Upload, ChevronDown } from 'lucide-react';
+import { Upload, ChevronDown, X, FileText, Image } from 'lucide-react';
 import { disputesApi } from '../services/api';
 import type { Dispute } from '../types';
 
@@ -11,23 +11,62 @@ interface SubmitEvidenceCardProps {
   onSubmitted: () => void;
 }
 
+const API_URL = 'http://localhost:8000';
+
 export function SubmitEvidenceCard({ disputeId, disputes, onSelected, onSubmitted }: SubmitEvidenceCardProps) {
   const [party, setParty] = useState<'claimant' | 'respondent'>('claimant');
   const [evidence, setEvidence] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+      setMessage({ type: 'error', text: 'Invalid file type. Only images and PDFs allowed.' });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'File too large. Max 5MB allowed.' });
+      return;
+    }
+
+    setSelectedFile(file);
+    setMessage(null);
+
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => setPreviewUrl(reader.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setPreviewUrl(null);
+    }
+  };
+
+  const clearFile = () => {
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!disputeId) {
+    if (disputeId === null) {
       setMessage({ type: 'error', text: 'Select a dispute first.' });
       return;
     }
-    
-    if (!evidence.trim()) {
-      setMessage({ type: 'error', text: 'Please enter evidence content.' });
+
+    if (!evidence.trim() && !selectedFile) {
+      setMessage({ type: 'error', text: 'Please enter evidence or upload a file.' });
       return;
     }
 
@@ -35,19 +74,45 @@ export function SubmitEvidenceCard({ disputeId, disputes, onSelected, onSubmitte
     setMessage({ type: 'success', text: 'Submitting evidence...' });
 
     try {
-      const response = await disputesApi.submitEvidence(disputeId, { party, content: evidence });
+      let content = evidence;
+
+      if (selectedFile) {
+        setUploading(true);
+        setMessage({ type: 'success', text: 'Uploading file...' });
+        
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        
+        const uploadResponse = await fetch(`${API_URL}/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!uploadResponse.ok) {
+          const error = await uploadResponse.json();
+          throw new Error(error.detail || 'Upload failed');
+        }
+        
+        const uploadResult = await uploadResponse.json();
+        content = uploadResult.file_url;
+        setUploading(false);
+      }
+
+      const response = await disputesApi.submitEvidence(disputeId, { party, content });
       
       if (response.success) {
         setMessage({ type: 'success', text: `Evidence submitted for ${party}!` });
         setEvidence('');
+        clearFile();
         onSubmitted();
       } else {
         setMessage({ type: 'error', text: response.message || 'Error submitting evidence' });
       }
-    } catch {
-      setMessage({ type: 'error', text: 'Connection failed. Is backend running?' });
+    } catch (err) {
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Connection failed. Is backend running?' });
     } finally {
       setLoading(false);
+      setUploading(false);
     }
   };
 
@@ -123,12 +188,58 @@ export function SubmitEvidenceCard({ disputeId, disputes, onSelected, onSubmitte
         </div>
 
         <div>
-          <label className="block text-sm text-gray-400 mb-2">Evidence</label>
+          <label className="block text-sm text-gray-400 mb-2">Upload File (Image/PDF)</label>
+          <div 
+            onClick={() => fileInputRef.current?.click()}
+            className="border-2 border-dashed border-white/20 rounded-2xl p-4 text-center cursor-pointer hover:border-blue-500/50 transition-all"
+          >
+            {selectedFile ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {previewUrl ? (
+                    <Image className="w-5 h-5 text-blue-400" />
+                  ) : (
+                    <FileText className="w-5 h-5 text-blue-400" />
+                  )}
+                  <span className="text-white text-sm truncate max-w-[150px]">{selectedFile.name}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); clearFile(); }}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="text-gray-400">
+                <Upload className="w-6 h-6 mx-auto mb-1" />
+                <p className="text-xs">Click to upload (max 5MB)</p>
+              </div>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+        </div>
+
+        {previewUrl && (
+          <div className="rounded-xl overflow-hidden border border-white/10">
+            <img src={previewUrl} alt="Preview" className="w-full max-h-40 object-contain" />
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm text-gray-400 mb-2">Or enter evidence text</label>
           <textarea
             value={evidence}
             onChange={(e) => setEvidence(e.target.value)}
             placeholder="Provide evidence, documents, or supporting information..."
-            rows={5}
+            rows={4}
             disabled={loading}
             className="w-full px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all resize-none disabled:opacity-50"
           />
@@ -136,12 +247,12 @@ export function SubmitEvidenceCard({ disputeId, disputes, onSelected, onSubmitte
 
         <motion.button
           type="submit"
-          disabled={loading || !disputeId}
-          whileHover={!loading && disputeId ? { scale: 1.02, boxShadow: '0 0 30px rgba(59, 130, 246, 0.4)' } : {}}
-          whileTap={!loading && disputeId ? { scale: 0.98 } : {}}
+          disabled={loading || uploading || disputeId === null}
+          whileHover={!loading && !uploading && disputeId !== null ? { scale: 1.02, boxShadow: '0 0 30px rgba(59, 130, 246, 0.4)' } : {}}
+          whileTap={!loading && !uploading && disputeId !== null ? { scale: 0.98 } : {}}
           className="w-full py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? 'Submitting...' : 'Submit Evidence'}
+          {uploading ? 'Uploading...' : loading ? 'Submitting...' : 'Submit Evidence'}
         </motion.button>
       </form>
 
