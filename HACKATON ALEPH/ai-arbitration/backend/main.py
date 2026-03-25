@@ -21,10 +21,11 @@ import time
 import random
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from supabase import create_client as create_supabase_client, Client
 
 load_dotenv()
 
@@ -60,6 +61,19 @@ app.add_middleware(
 PRIVATE_KEY = os.getenv("PRIVATE_KEY", "")
 CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "")
 STUDIO_URL = "https://studio.genlayer.com/api"
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+
+supabase_client: Client = None
+if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
+    try:
+        supabase_client = create_supabase_client(
+            SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+        )
+        print(f"✅  Connected to Supabase")
+    except Exception as e:
+        print(f"⚠️  Failed to connect to Supabase: {e}")
 
 # Initialize GenLayer client
 client = None
@@ -414,3 +428,94 @@ async def get_transaction(tx_hash: str):
         "tx_hash": tx_hash,
         "explorer_url": f"https://explorer-bradbury.genlayer.com/tx/{tx_hash}",
     }
+
+
+ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
+MAX_SIZE = 5 * 1024 * 1024
+BUCKET_NAME = "Ai-Arbitration"
+
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """Upload a file to Supabase Storage and return public URL.
+    - Images (jpg, png, webp): upload directly
+    - PDFs: extract text and save as .txt if possible
+    """
+    if not supabase_client:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+
+    if file.content_type not in ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type not allowed. Allowed: {', '.join(ALLOWED_TYPES)}",
+        )
+
+    contents = await file.read()
+    if len(contents) > MAX_SIZE:
+        raise HTTPException(status_code=400, detail="File too large. Max 5MB")
+
+    import uuid
+
+    base_name = (
+        file.filename.rsplit(".", 1)[0] if "." in file.filename else file.filename
+    )
+    uuid_prefix = str(uuid.uuid4())
+
+    try:
+        if file.content_type == "application/pdf":
+            from io import BytesIO
+            from PyPDF2 import PdfReader
+
+            pdf_reader = PdfReader(BytesIO(contents))
+            extracted_text = ""
+
+            for page in pdf_reader.pages:
+                text = page.extract_text()
+                if text:
+                    extracted_text += text + "\n\n"
+
+            if extracted_text.strip():
+                txt_file_path = f"{uuid_prefix}_{base_name}.txt"
+                txt_bytes = extracted_text.encode("utf-8")
+
+                supabase_client.storage.from_(BUCKET_NAME).upload(
+                    txt_file_path,
+                    txt_bytes,
+                    {"content_type": "text/plain; charset=utf-8"},
+                )
+                public_url = supabase_client.storage.from_(BUCKET_NAME).get_public_url(
+                    txt_file_path
+                )
+
+                return {
+                    "success": True,
+                    "file_url": public_url,
+                    "file_name": f"{base_name}.txt",
+                    "content_type": "text/plain",
+                }
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="PDF has no extractable text. Please upload an image or a PDF with text content.",
+                )
+        else:
+            ext = file.filename.split(".")[-1] if "." in file.filename else "bin"
+            file_path = f"{uuid_prefix}.{ext}"
+
+            supabase_client.storage.from_(BUCKET_NAME).upload(
+                file_path, contents, {"content_type": file.content_type}
+            )
+            public_url = supabase_client.storage.from_(BUCKET_NAME).get_public_url(
+                file_path
+            )
+
+            return {
+                "success": True,
+                "file_url": public_url,
+                "file_name": file.filename,
+                "content_type": file.content_type,
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")

@@ -4,3 +4,5 @@ python-dotenv==1.0.1
 pydantic==2.7.1
 httpx==0.27.0
 genlayer
+supabase>=2.0.0
+PyPDF2>=3.0.0
