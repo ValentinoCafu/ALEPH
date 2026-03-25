@@ -188,30 +188,11 @@ ai-arbitration/
 
 ---
 
-## 🔐 Environment Configuration
+## 📦 Included Files
 
-The application comes pre-configured with:
-
-| Variable | Pre-configured | Description |
-|----------|----------------|-------------|
-| `SUPABASE_URL` | ✅ | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase storage access |
-| `CONTRACT_ADDRESS` | ✅ | GenLayer contract address |
-| `PRIVATE_KEY` | ✅ | Wallet private key (limited funds) |
-
-> **Security Note**: The `.env` file is git-ignored and never committed. The pre-configured wallet has minimal test funds for demonstration purposes.
-
-### Changing Configuration
-
-To use your own wallet or contract:
-
-```bash
-# Edit the .env file
-nano backend/.env
-
-# Or create from template
-cp backend/.env.example backend/.env
-```
+The project includes example files in the root:
+- `setup.sh` - Complete setup script
+- `run.sh` - Run both frontend and backend
 
 ---
 
