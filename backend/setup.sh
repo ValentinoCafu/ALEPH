@@ -26,10 +26,11 @@ fi
 echo "Creating .env file from template..."
 cp .env.example .env
 
-# Check if PRIVATE_KEY is set
-if grep -q "PRIVATE_KEY=0ce8660eebcc62476f76ab59e3ca54a55b34d4bc80626048155edf580e623bd8" .env 2>/dev/null; then
+# Remind user to configure their private key
+if grep -q "aqui-va-tu-private-key" .env 2>/dev/null; then
     echo ""
-    echo "Using pre-configured wallet private key."
+    echo "IMPORTANT: Please edit .env and add your own PRIVATE_KEY"
+    echo "Get it from MetaMask: Account Details → Export Private Key"
 fi
 
 echo ""
