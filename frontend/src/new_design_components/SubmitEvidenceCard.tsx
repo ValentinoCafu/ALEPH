@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Upload, ChevronDown, X, FileText, Image } from 'lucide-react';
+import { Upload, ChevronDown, X, FileText, Image, Loader2 } from 'lucide-react';
 import { disputesApi } from '../services/api';
 import type { Dispute } from '../types';
 
@@ -20,9 +20,43 @@ export function SubmitEvidenceCard({ disputeId, disputes, onSelected, onSubmitte
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (uploading) {
+      const steps = [
+        'Uploading file to storage...',
+        'Processing uploaded file...',
+        'Preparing evidence...',
+      ];
+      let i = 0;
+      setProgress(steps[0]);
+      interval = setInterval(() => {
+        i = (i + 1) % steps.length;
+        setProgress(steps[i]);
+      }, 2500);
+    } else if (loading) {
+      const steps = [
+        'Connecting to blockchain...',
+        'Signing transaction...',
+        'Waiting for confirmation...',
+        'Finalizing on-chain...',
+      ];
+      let i = 0;
+      setProgress(steps[0]);
+      interval = setInterval(() => {
+        i = (i + 1) % steps.length;
+        setProgress(steps[i]);
+      }, 3000);
+    } else {
+      setProgress('');
+    }
+    return () => clearInterval(interval);
+  }, [uploading, loading]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -250,10 +284,24 @@ export function SubmitEvidenceCard({ disputeId, disputes, onSelected, onSubmitte
           disabled={loading || uploading || disputeId === null}
           whileHover={!loading && !uploading && disputeId !== null ? { scale: 1.02, boxShadow: '0 0 30px rgba(59, 130, 246, 0.4)' } : {}}
           whileTap={!loading && !uploading && disputeId !== null ? { scale: 0.98 } : {}}
-          className="w-full py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {uploading ? 'Uploading...' : loading ? 'Submitting...' : 'Submit Evidence'}
+          {(loading || uploading) ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>{uploading ? 'Uploading...' : 'Submitting...'}</span>
+            </>
+          ) : (
+            'Submit Evidence'
+          )}
         </motion.button>
+
+        {(loading || uploading) && progress && (
+          <div className="mt-2 text-center">
+            <p className="text-sm text-cyan-400 animate-pulse">{progress}</p>
+            <p className="text-xs text-gray-500 mt-1">This may take 10-30 seconds</p>
+          </div>
+        )}
       </form>
 
       {message && (

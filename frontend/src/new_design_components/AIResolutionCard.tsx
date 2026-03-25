@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Sparkles, ChevronDown } from 'lucide-react';
+import { Sparkles, ChevronDown, Loader2 } from 'lucide-react';
 import { disputesApi } from '../services/api';
 import { VERDICT_CONFIG } from '../constants';
 import type { Dispute } from '../types';
@@ -14,13 +14,36 @@ interface AIResolutionCardProps {
 
 export function AIResolutionCard({ disputeId, disputes, onSelected, onResolved }: AIResolutionCardProps) {
   const [isResolving, setIsResolving] = useState(false);
+  const [progress, setProgress] = useState('');
   const [result, setResult] = useState<Dispute | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isResolving) {
+      const steps = [
+        'Connecting to validators...',
+        'Calling AI models...',
+        'Analyzing evidence...',
+        'Reaching consensus...',
+        'Finalizing verdict...',
+      ];
+      let i = 0;
+      setProgress(steps[0]);
+      interval = setInterval(() => {
+        i = (i + 1) % steps.length;
+        setProgress(steps[i]);
+      }, 4000);
+    } else {
+      setProgress('');
+    }
+    return () => clearInterval(interval);
+  }, [isResolving]);
 
   const handleResolve = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!disputeId) return;
+    if (disputeId === null) return;
     
     setIsResolving(true);
     setResult(null);
@@ -121,20 +144,15 @@ export function AIResolutionCard({ disputeId, disputes, onSelected, onResolved }
 
         <motion.button
           type="submit"
-          disabled={isResolving || !disputeId}
-          whileHover={!isResolving && disputeId ? { scale: 1.02, boxShadow: '0 0 30px rgba(16, 185, 129, 0.4)' } : {}}
-          whileTap={!isResolving && disputeId ? { scale: 0.98 } : {}}
+          disabled={isResolving || disputeId === null}
+          whileHover={!isResolving && disputeId !== null ? { scale: 1.02, boxShadow: '0 0 30px rgba(16, 185, 129, 0.4)' } : {}}
+          whileTap={!isResolving && disputeId !== null ? { scale: 0.98 } : {}}
           className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden"
         >
           {isResolving ? (
             <span className="flex items-center justify-center gap-2">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-              >
-                <Sparkles className="w-5 h-5" />
-              </motion.div>
-              Resolving...
+              <Loader2 className="w-5 h-5 animate-spin" />
+              AI Analyzing...
             </span>
           ) : (
             <span className="flex items-center justify-center gap-2">
@@ -143,6 +161,13 @@ export function AIResolutionCard({ disputeId, disputes, onSelected, onResolved }
             </span>
           )}
         </motion.button>
+
+        {isResolving && progress && (
+          <div className="mt-2 text-center">
+            <p className="text-sm text-emerald-400 animate-pulse">{progress}</p>
+            <p className="text-xs text-gray-500 mt-1">AI processing may take 30-60 seconds</p>
+          </div>
+        )}
       </form>
 
       {result && !isResolving && verdict && config && (

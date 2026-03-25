@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { FileText } from 'lucide-react';
+import { FileText, Loader2 } from 'lucide-react';
 import { disputesApi } from '../services/api';
 import type { CreateDisputeRequest } from '../types';
 
@@ -18,6 +18,7 @@ export function CreateDisputeCard({ onCreated, pendingScenario, clearScenario }:
     description: '',
   });
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -25,6 +26,27 @@ export function CreateDisputeCard({ onCreated, pendingScenario, clearScenario }:
       setFormData(pendingScenario);
     }
   }, [pendingScenario]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (loading) {
+      const steps = [
+        'Connecting to blockchain...',
+        'Signing transaction...',
+        'Waiting for confirmation...',
+        'Finalizing on-chain...',
+      ];
+      let i = 0;
+      setProgress(steps[0]);
+      interval = setInterval(() => {
+        i = (i + 1) % steps.length;
+        setProgress(steps[i]);
+      }, 3000);
+    } else {
+      setProgress('');
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +57,7 @@ export function CreateDisputeCard({ onCreated, pendingScenario, clearScenario }:
     }
 
     setLoading(true);
-    setMessage({ type: 'success', text: 'Creating dispute...' });
+    setMessage({ type: 'success', text: 'Submitting to blockchain...' });
 
     try {
       const response = await disputesApi.create(formData);
@@ -125,10 +147,24 @@ export function CreateDisputeCard({ onCreated, pendingScenario, clearScenario }:
           disabled={loading}
           whileHover={!loading ? { scale: 1.02, boxShadow: '0 0 30px rgba(168, 85, 247, 0.4)' } : {}}
           whileTap={!loading ? { scale: 0.98 } : {}}
-          className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-semibold transition-all shadow-lg shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-semibold transition-all shadow-lg shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {loading ? 'Creating...' : 'Submit Dispute'}
+          {loading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Creating on Blockchain...</span>
+            </>
+          ) : (
+            'Submit Dispute'
+          )}
         </motion.button>
+
+        {loading && progress && (
+          <div className="mt-2 text-center">
+            <p className="text-sm text-cyan-400 animate-pulse">{progress}</p>
+            <p className="text-xs text-gray-500 mt-1">This may take 10-30 seconds</p>
+          </div>
+        )}
       </form>
 
       {message && (
